@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Post } from "@/types";
+import { RawPost } from "@/types";
 
-const DUMMY_POSTS: Post[] = [
+const DUMMY_POSTS: RawPost[] = [
   {
     title: "梅雨の髪の広がり、我慢していませんか？",
     body: "梅雨になると、朝きれいに整えた髪がすぐに広がってしまう…。\nそんなお悩みには、髪の内側から整える髪質改善トリートメントがおすすめです。\n湿気に負けにくい、まとまりやすい髪を目指しませんか？",
@@ -45,7 +45,7 @@ const DUMMY_POSTS: Post[] = [
     cta: "プロフィールのリンクから今すぐ予約を。",
   },
   {
-    title: "スタッフがこだわる、こだわりのポイントとは",
+    title: "スタッフがこだわる、アフターフォローの話",
     body: "私たちが特にこだわっているのは、施術後のアフターフォロー。\nご帰宅後もきれいが続くよう、ひとりひとりに合ったケア方法をお伝えしています。\nこれからもずっと、お客様の味方でいたいと思っています。",
     hashtags: ["#こだわり", "#スタッフ", "#アフターフォロー", "#丁寧", "#信念"],
     cta: "スタッフ一同、お待ちしております。",
@@ -67,7 +67,7 @@ const DUMMY_POSTS: Post[] = [
 const SYSTEM_PROMPT = `あなたは小規模店舗（美容室・整体院・飲食店・ネイルサロン・個人教室など）のInstagram投稿文を作成するプロのライターです。
 ユーザーが入力したお店の情報をもとに、Instagram投稿文を10個作成してください。
 
-各投稿は必ず以下のJSON配列形式で返してください。JSON以外のテキストは一切出力しないでください：
+各投稿は必ず以下のJSON配列形式のみで返してください。JSON以外のテキストは一切出力しないでください：
 [
   {
     "title": "投稿タイトル（25文字以内）",
@@ -87,11 +87,7 @@ const SYSTEM_PROMPT = `あなたは小規模店舗（美容室・整体院・飲
 - CTAは自然にする
 - 10個すべて切り口を変える（悩み共感・季節ネタ・Before/After風・よくある質問・豆知識・お客様の声風・キャンペーン告知・スタッフ目線・失敗回避・予約促進）`;
 
-function buildUserPrompt(input: string): string {
-  return `以下のお店の情報をもとに、Instagram投稿文を10個作成してください。\n\n${input}`;
-}
-
-function parsePosts(text: string): Post[] {
+function parsePosts(text: string): RawPost[] {
   const jsonMatch = text.match(/\[[\s\S]*\]/);
   if (!jsonMatch) throw new Error("JSONが見つかりません");
   const parsed = JSON.parse(jsonMatch[0]);
@@ -131,7 +127,10 @@ export async function POST(req: NextRequest) {
       model: "gpt-4o-mini",
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: buildUserPrompt(userInput.trim()) },
+        {
+          role: "user",
+          content: `以下のお店の情報をもとに、Instagram投稿文を10個作成してください。\n\n${userInput.trim()}`,
+        },
       ],
       temperature: 0.8,
       max_tokens: 4096,
@@ -144,7 +143,10 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     console.error("generate error:", err);
     return NextResponse.json(
-      { error: "投稿文の生成に失敗しました。しばらくしてからもう一度お試しください。" },
+      {
+        error:
+          "投稿文の生成に失敗しました。しばらくしてからもう一度お試しください。",
+      },
       { status: 500 }
     );
   }
