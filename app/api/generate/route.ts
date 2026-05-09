@@ -117,7 +117,14 @@ export async function POST(req: NextRequest) {
 
     if (!apiKey) {
       await new Promise((r) => setTimeout(r, 800));
-      return NextResponse.json({ posts: DUMMY_POSTS });
+      // Shuffle based on input so different text gives different results in demo mode
+      const seed = userInput.trim().split("").reduce((acc: number, c: string) => acc + c.charCodeAt(0), 0);
+      const shuffled = [...DUMMY_POSTS];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = (seed * (i + 3)) % (i + 1);
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      return NextResponse.json({ posts: shuffled });
     }
 
     const { default: OpenAI } = await import("openai");

@@ -3,11 +3,13 @@
 import { useState } from "react";
 import PostCard from "@/components/PostCard";
 import SeasonalSuggestions from "@/components/SeasonalSuggestions";
+import SavedInputs from "@/components/SavedInputs";
 import HistoryPanel from "@/components/HistoryPanel";
 import CalendarView from "@/components/CalendarView";
 import NotificationSetup from "@/components/NotificationSetup";
 import { Post, RawPost } from "@/types";
 import { useSessions } from "@/hooks/useSessions";
+import { useSavedInputs } from "@/hooks/useSavedInputs";
 
 const MAX_CHARS = 500;
 const PLACEHOLDER = `例）福島市の美容室です。30代女性向けに、髪質改善トリートメントを売りたいです。梅雨の広がりやうねりに悩む人向けのInstagram投稿を作りたいです。`;
@@ -46,11 +48,14 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [allCopied, setAllCopied] = useState(false);
+  const [inputSaved, setInputSaved] = useState(false);
 
   const { sessions, addSession, updatePost, scheduledPosts } = useSessions();
+  const { savedInputs, saveInput, removeInput } = useSavedInputs();
 
-  const handleGenerate = async () => {
-    if (!userInput.trim()) return;
+  // Core generation — accepts input directly to avoid stale closure issues
+  const handleGenerateWith = async (input: string) => {
+    if (!input.trim()) return;
     setIsLoading(true);
     setError(null);
     setCurrentPosts([]);
@@ -60,7 +65,7 @@ export default function Home() {
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userInput }),
+        body: JSON.stringify({ userInput: input }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -78,7 +83,7 @@ export default function Home() {
       }));
 
       setCurrentPosts(posts);
-      const sid = addSession(userInput, posts);
+      const sid = addSession(input, posts);
       setCurrentSessionId(sid);
     } catch {
       setError(
@@ -89,6 +94,8 @@ export default function Home() {
     }
   };
 
+  const handleGenerate = () => handleGenerateWith(userInput);
+
   const handleUpdateCurrentPost = (postId: string, updates: Partial<Post>) => {
     setCurrentPosts((prev) =>
       prev.map((p) => (p.id === postId ? { ...p, ...updates } : p))
@@ -98,11 +105,24 @@ export default function Home() {
     }
   };
 
+  // Append seasonal theme AND immediately trigger generation with the new text
   const handleAppendSuggestion = (theme: string) => {
-    setUserInput((prev) => {
-      const suffix = prev.trim() ? `、${theme}` : theme;
-      return (prev + suffix).slice(0, MAX_CHARS);
-    });
+    const suffix = userInput.trim() ? `、${theme}` : theme;
+    const newInput = (userInput + suffix).slice(0, MAX_CHARS);
+    setUserInput(newInput);
+    void handleGenerateWith(newInput);
+  };
+
+  // Load saved input into textarea (user can edit before generating)
+  const handleLoadSavedInput = (input: string) => {
+    setUserInput(input);
+  };
+
+  const handleSaveInput = () => {
+    if (!userInput.trim()) return;
+    saveInput(userInput);
+    setInputSaved(true);
+    setTimeout(() => setInputSaved(false), 2000);
   };
 
   const handleCopyAll = async () => {
@@ -206,6 +226,13 @@ export default function Home() {
             <section className="bg-white rounded-2xl shadow-sm border border-purple-100 p-4 sm:p-6 mb-6">
               <SeasonalSuggestions onSelect={handleAppendSuggestion} />
 
+              {/* Saved inputs */}
+              <SavedInputs
+                savedInputs={savedInputs}
+                onLoad={handleLoadSavedInput}
+                onRemove={removeInput}
+              />
+
               <label
                 htmlFor="userInput"
                 className="block text-sm font-semibold text-gray-700 mb-2"
@@ -223,9 +250,18 @@ export default function Home() {
                 className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent resize-none transition"
               />
               <div className="flex items-center justify-between mt-1">
-                <p className="text-xs text-gray-400">
-                  業種・ターゲット・売りたい商品・キャンペーンなど自由に書いてください
-                </p>
+                <button
+                  type="button"
+                  onClick={handleSaveInput}
+                  disabled={!userInput.trim()}
+                  className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-all duration-200 ${
+                    inputSaved
+                      ? "bg-green-50 border-green-300 text-green-600"
+                      : "bg-white border-gray-200 text-gray-500 hover:border-purple-300 hover:text-purple-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                  }`}
+                >
+                  {inputSaved ? "✓ 保存しました" : "📌 入力を保存"}
+                </button>
                 <p
                   className={`text-xs font-medium ${
                     userInput.length >= MAX_CHARS
