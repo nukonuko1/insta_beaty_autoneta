@@ -83,7 +83,7 @@ const SYSTEM_PROMPT = `あなたは小規模店舗（美容室・整体院・飲
 投稿文のルール：
 - 入力されたお店の業種・サービス・ターゲットに完全に合わせること
 - 小規模店舗のInstagramとして自然な文章にする
-- 売り込み感を強くしすぎない
+- 声り込み感を強くしすぎない
 - 読者の悩みに寄り添う
 - 具体的なシーンを入れる
 - 本文は120〜220文字程度
@@ -119,8 +119,8 @@ function buildFallback(seed: string): RawPost[] {
   return arr;
 }
 
-// Each generator is isolated — failure falls through to the next option
-async function tryAnthropic(userInput: string, apiKey: string): Promise<RawPost[] | null> {
+// Each generator returns posts on success, error string on failure
+async function tryAnthropic(userInput: string, apiKey: string): Promise<RawPost[] | string> {
   try {
     const { default: Anthropic } = await import("@anthropic-ai/sdk");
     const client = new Anthropic({ apiKey });
@@ -136,12 +136,13 @@ async function tryAnthropic(userInput: string, apiKey: string): Promise<RawPost[
       .join("");
     return parsePosts(text);
   } catch (e) {
-    console.error("[generate] Anthropic failed:", e instanceof Error ? e.message : e);
-    return null;
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[generate] Anthropic failed:", msg);
+    return msg;
   }
 }
 
-async function tryOpenAI(userInput: string, apiKey: string): Promise<RawPost[] | null> {
+async function tryOpenAI(userInput: string, apiKey: string): Promise<RawPost[] | string> {
   try {
     const { default: OpenAI } = await import("openai");
     const client = new OpenAI({ apiKey });
@@ -157,8 +158,9 @@ async function tryOpenAI(userInput: string, apiKey: string): Promise<RawPost[] |
     const text = completion.choices[0]?.message?.content ?? "";
     return parsePosts(text);
   } catch (e) {
-    console.error("[generate] OpenAI failed:", e instanceof Error ? e.message : e);
-    return null;
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[generate] OpenAI failed:", msg);
+    return msg;
   }
 }
 
@@ -178,25 +180,28 @@ export async function POST(req: NextRequest) {
 
   const anthropicKey = process.env.ANTHROPIC_API_KEY?.trim();
   const openaiKey = process.env.OPENAI_API_KEY?.trim();
-  const hasKey = !!(anthropicKey || openaiKey);
+  let apiErrorMsg = "";
 
   // Try Anthropic → OpenAI → fallback (each isolated, never throws to caller)
   if (anthropicKey) {
-    const posts = await tryAnthropic(userInput, anthropicKey);
-    if (posts) return NextResponse.json({ posts });
+    const result = await tryAnthropic(userInput, anthropicKey);
+    if (Array.isArray(result)) return NextResponse.json({ posts: result });
+    apiErrorMsg = result;
   }
 
   if (openaiKey) {
-    const posts = await tryOpenAI(userInput, openaiKey);
-    if (posts) return NextResponse.json({ posts });
+    const result = await tryOpenAI(userInput, openaiKey);
+    if (Array.isArray(result)) return NextResponse.json({ posts: result });
+    if (!apiErrorMsg) apiErrorMsg = result;
   }
 
   // Fallback — always succeeds
   await new Promise((r) => setTimeout(r, 600));
+  const hasKey = !!(anthropicKey || openaiKey);
   return NextResponse.json({
     posts: buildFallback(userInput),
     warning: hasKey
-      ? "APIキーは検出されましたが生成に失敗しました。Anthropicのキーが有効か確認してください。"
+      ? `APIエラー: ${apiErrorMsg}`
       : "APIキーが未設定のためサンプルを表示しています。Vercel環境変数に ANTHROPIC_API_KEY を設定後、必ず再デプロイしてください。",
   });
 }
