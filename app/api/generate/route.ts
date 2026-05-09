@@ -178,6 +178,7 @@ export async function POST(req: NextRequest) {
 
   const anthropicKey = process.env.ANTHROPIC_API_KEY?.trim();
   const openaiKey = process.env.OPENAI_API_KEY?.trim();
+  const hasKey = !!(anthropicKey || openaiKey);
 
   // Try Anthropic → OpenAI → fallback (each isolated, never throws to caller)
   if (anthropicKey) {
@@ -194,6 +195,8 @@ export async function POST(req: NextRequest) {
   await new Promise((r) => setTimeout(r, 600));
   return NextResponse.json({
     posts: buildFallback(userInput),
-    warning: "APIキーが設定されていないため、サンプル投稿文を表示しています。",
+    warning: hasKey
+      ? "APIキーは検出されましたが生成に失敗しました。Anthropicのキーが有効か確認してください。"
+      : "APIキーが未設定のためサンプルを表示しています。Vercel環境変数に ANTHROPIC_API_KEY を設定後、必ず再デプロイしてください。",
   });
 }
