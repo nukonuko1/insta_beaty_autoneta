@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { RawPost } from "@/types";
 
-// Generic fallback posts — used only when NO API key is configured
-// These are intentionally business-type-agnostic templates
+// Generic fallback — business-type-agnostic, used when no API key is configured
 const FALLBACK_POSTS: RawPost[] = [
   {
     title: "あなたのお悩み、解決できます",
@@ -92,6 +91,9 @@ const SYSTEM_PROMPT = `あなたは小規模店舗（美容室・整体院・飲
 - CTAは自然にする
 - 10個すべて切り口を変える（悩み共感・季節ネタ・Before/After風・よくある質問・豆知識・お客様の声風・キャンペーン告知・スタッフ目線・失敗回避・予約促進）`;
 
+const USER_PROMPT = (input: string) =>
+  `以下のお店の情報をもとに、そのお店・業種に完全に合わせたInstagram投稿文を10個作成してください。\n\n${input.trim()}`;
+
 function parsePosts(text: string): RawPost[] {
   const jsonMatch = text.match(/\[[\s\S]*\]/);
   if (!jsonMatch) throw new Error("JSONが見つかりません");
@@ -107,7 +109,7 @@ function parsePosts(text: string): RawPost[] {
   }));
 }
 
-function shuffleFallback(seed: string): RawPost[] {
+function buildFallback(seed: string): RawPost[] {
   const hash = seed.split("").reduce((acc: number, c: string) => acc + c.charCodeAt(0), 0);
   const arr = [...FALLBACK_POSTS];
   for (let i = arr.length - 1; i > 0; i--) {
@@ -117,67 +119,81 @@ function shuffleFallback(seed: string): RawPost[] {
   return arr;
 }
 
-const USER_PROMPT = (input: string) =>
-  `以下のお店の情報をもとに、そのお店・業種に完全に合わせたInstagram投稿文を10個作成してください。\n\n${input.trim()}`;
+// Each generator is isolated — failure falls through to the next option
+async function tryAnthropic(userInput: string, apiKey: string): Promise<RawPost[] | null> {
+  try {
+    const { default: Anthropic } = await import("@anthropic-ai/sdk");
+    const client = new Anthropic({ apiKey });
+    const msg = await client.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 4096,
+      system: SYSTEM_PROMPT,
+      messages: [{ role: "user", content: USER_PROMPT(userInput) }],
+    });
+    const text = msg.content
+      .filter((b) => b.type === "text")
+      .map((b) => (b as { type: "text"; text: string }).text)
+      .join("");
+    return parsePosts(text);
+  } catch (e) {
+    console.error("[generate] Anthropic failed:", e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
+async function tryOpenAI(userInput: string, apiKey: string): Promise<RawPost[] | null> {
+  try {
+    const { default: OpenAI } = await import("openai");
+    const client = new OpenAI({ apiKey });
+    const completion = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: USER_PROMPT(userInput) },
+      ],
+      temperature: 0.8,
+      max_tokens: 4096,
+    });
+    const text = completion.choices[0]?.message?.content ?? "";
+    return parsePosts(text);
+  } catch (e) {
+    console.error("[generate] OpenAI failed:", e instanceof Error ? e.message : e);
+    return null;
+  }
+}
 
 export async function POST(req: NextRequest) {
+  // Parse request body
+  let userInput: string;
   try {
-    const { userInput } = await req.json();
-
-    if (!userInput || typeof userInput !== "string" || userInput.trim() === "") {
-      return NextResponse.json(
-        { error: "お店の情報を入力してください。" },
-        { status: 400 }
-      );
-    }
-
-    const anthropicKey = process.env.ANTHROPIC_API_KEY;
-    const openaiKey = process.env.OPENAI_API_KEY;
-
-    // 1. Try Anthropic Claude (primary)
-    if (anthropicKey) {
-      const { default: Anthropic } = await import("@anthropic-ai/sdk");
-      const client = new Anthropic({ apiKey: anthropicKey });
-      const message = await client.messages.create({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 4096,
-        system: SYSTEM_PROMPT,
-        messages: [{ role: "user", content: USER_PROMPT(userInput) }],
-      });
-      const text = message.content[0]?.type === "text" ? message.content[0].text : "";
-      const posts = parsePosts(text);
-      return NextResponse.json({ posts });
-    }
-
-    // 2. Try OpenAI (secondary)
-    if (openaiKey) {
-      const { default: OpenAI } = await import("openai");
-      const client = new OpenAI({ apiKey: openaiKey });
-      const completion = await client.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: USER_PROMPT(userInput) },
-        ],
-        temperature: 0.8,
-        max_tokens: 4096,
-      });
-      const text = completion.choices[0]?.message?.content ?? "";
-      const posts = parsePosts(text);
-      return NextResponse.json({ posts });
-    }
-
-    // 3. No API key — return generic fallback with a clear warning header
-    await new Promise((r) => setTimeout(r, 600));
-    return NextResponse.json({
-      posts: shuffleFallback(userInput),
-      warning: "APIキーが設定されていないため、サンプル投稿文を表示しています。",
-    });
-  } catch (err) {
-    console.error("generate error:", err);
-    return NextResponse.json(
-      { error: "投稿文の生成に失敗しました。しばらくしてからもう一度お試しください。" },
-      { status: 500 }
-    );
+    const body = await req.json();
+    userInput = body?.userInput ?? "";
+  } catch {
+    return NextResponse.json({ error: "リクエストが不正です。" }, { status: 400 });
   }
+
+  if (!userInput || typeof userInput !== "string" || !userInput.trim()) {
+    return NextResponse.json({ error: "お店の情報を入力してください。" }, { status: 400 });
+  }
+
+  const anthropicKey = process.env.ANTHROPIC_API_KEY?.trim();
+  const openaiKey = process.env.OPENAI_API_KEY?.trim();
+
+  // Try Anthropic → OpenAI → fallback (each isolated, never throws to caller)
+  if (anthropicKey) {
+    const posts = await tryAnthropic(userInput, anthropicKey);
+    if (posts) return NextResponse.json({ posts });
+  }
+
+  if (openaiKey) {
+    const posts = await tryOpenAI(userInput, openaiKey);
+    if (posts) return NextResponse.json({ posts });
+  }
+
+  // Fallback — always succeeds
+  await new Promise((r) => setTimeout(r, 600));
+  return NextResponse.json({
+    posts: buildFallback(userInput),
+    warning: "APIキーが設定されていないため、サンプル投稿文を表示しています。",
+  });
 }
