@@ -23,7 +23,7 @@ const FALLBACK_POSTS: RawPost[] = [
   },
   {
     title: "初めてでも安心！カウンセリングから",
-    body: "「初めてで何も分からない」という方こそ、ぜひお越しください。\nカウンセリングでじっくりお話を聞いてから、最適なメニューをご提案します。\n押し売りは一切しませんので、安心してご相談ください。",
+    body: "「初めてで何も分からない」という方こそ、ぜひお越しください。\nカウンセリングでじっくりお話を聞いてから、最適なメニューをご提案します。\n押し声りは一切しませんので、安心してご相談ください。",
     hashtags: ["#初回歓迎", "#カウンセリング", "#安心", "#初めての方", "#丁寧な説明"],
     cta: "気軽にDMやお電話でどうぞ。",
   },
@@ -125,7 +125,7 @@ async function tryAnthropic(userInput: string, apiKey: string): Promise<RawPost[
     const { default: Anthropic } = await import("@anthropic-ai/sdk");
     const client = new Anthropic({ apiKey });
     const msg = await client.messages.create({
-      model: "claude-haiku-4-5-20251001",
+      model: "claude-3-5-haiku-20241022",
       max_tokens: 4096,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: USER_PROMPT(userInput) }],
