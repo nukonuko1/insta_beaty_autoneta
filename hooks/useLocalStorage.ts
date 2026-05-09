@@ -5,13 +5,12 @@ import { useState, useEffect } from "react";
 export function useLocalStorage<T>(key: string, initialValue: T) {
   const [value, setValue] = useState<T>(initialValue);
 
-  // Hydrate from localStorage after mount (avoids SSR mismatch)
   useEffect(() => {
     try {
       const stored = localStorage.getItem(key);
       if (stored !== null) setValue(JSON.parse(stored) as T);
     } catch {
-      // ignore parse errors or storage unavailable
+      // ignore
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
