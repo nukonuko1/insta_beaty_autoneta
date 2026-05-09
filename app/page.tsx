@@ -49,15 +49,17 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [allCopied, setAllCopied] = useState(false);
   const [inputSaved, setInputSaved] = useState(false);
+  const [apiWarning, setApiWarning] = useState<string | null>(null);
 
   const { sessions, addSession, updatePost, scheduledPosts } = useSessions();
   const { savedInputs, saveInput, removeInput } = useSavedInputs();
 
   // Core generation — accepts input directly to avoid stale closure issues
   const handleGenerateWith = async (input: string) => {
-    if (!input.trim()) return;
+    if (!input.trim() || isLoading) return;
     setIsLoading(true);
     setError(null);
+    setApiWarning(null);
     setCurrentPosts([]);
     setCurrentSessionId(null);
 
@@ -72,6 +74,8 @@ export default function Home() {
         setError(data.error ?? "エラーが発生しました。");
         return;
       }
+
+      if (data.warning) setApiWarning(data.warning);
 
       const rawPosts: RawPost[] = data.posts ?? [];
       const posts: Post[] = rawPosts.map((p, i) => ({
@@ -304,6 +308,16 @@ export default function Home() {
               </div>
             )}
 
+            {/* API warning (no key set) */}
+            {apiWarning && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-3 mb-4 text-yellow-700 text-xs text-center">
+                ⚠️ {apiWarning}
+                <span className="block mt-0.5 text-yellow-600">
+                  Vercelの環境変数に ANTHROPIC_API_KEY を設定すると、入力内容に合わせた投稿文が生成されます。
+                </span>
+              </div>
+            )}
+
             {/* Results */}
             {currentPosts.length > 0 && (
               <section>
@@ -350,7 +364,7 @@ export default function Home() {
             {currentPosts.length === 0 && !isLoading && (
               <section className="mt-8">
                 <h2 className="text-center font-bold text-gray-700 mb-5 text-base">
-                  かんた〉3ステップで使えます
+                  かんたん3ステップで使えます
                 </h2>
                 <div className="grid gap-4 sm:grid-cols-3">
                   {HOW_TO_STEPS.map((step) => (
