@@ -22,7 +22,7 @@ const DUMMY_POSTS: RawPost[] = [
   },
   {
     title: "「どんなメニューが向いているか分からない」というあなたへ",
-    body: "初めての方からよくいただくご質問です。\nカウンセリングでお悩みをしっかり聴いてから、最適なメニューをご提案します。\n迷っている方こそ、まず気軽にご相談ください。",
+    body: "初めての方からよくいただくご質問です。\nカウンセリングでお悩みをしっかり耳に届けてから、最適なメニューをご提案します。\n迂っている方こそ、まず気軽にご相談ください。",
     hashtags: ["#カウンセリング", "#初めての方", "#安心", "#丁寧な対応", "#ご相談"],
     cta: "DMまたはお電話でお気軽にどうぞ。",
   },
@@ -33,14 +33,14 @@ const DUMMY_POSTS: RawPost[] = [
     cta: "来店時にスタッフへ何でも聴いてください。",
   },
   {
-    title: "お客様の声：「通い始めたモンス3ヶ月で変わりました」",
-    body: "定期的にご来店くださっているお客様より、うれしいお言葉をいただきました。\n「最初は半信半疊でしたが、続けるうちにしっかり変化を感じられました」とのこと。\n続けることで実感できる変化があります。",
+    title: "お客様の声：「通い始めて３ヶ月で変わりました」",
+    body: "定期的にご来店くださっているお客様より、うれしいお言葉をいただきました。\n「最初は半信半疑でしたが、続けるうちにしっかり変化を感じられました」とのこと。\n続けることで実感できる変化があります。",
     hashtags: ["#お客様の声", "#リピーター", "#信頼", "#実績", "#体験談"],
     cta: "まずは一度体験してみませんか？",
   },
   {
     title: "今月限定！お得なキャンペーン実施中",
-    body: "今月は特別なキャンペーンをご用意しています。\nいつも気になっていたメニューに、このチャンスに挑戦してみてください。\n枠に限りがありますので、お早めにどうぞ。",
+    body: "今月は特別なキャンペーンをご用意しています。\nいつも気になっていたメニューに、このチャンスに挑戦してみてください。\n渠に限りがありますので、お早めにどうぞ。",
     hashtags: ["#キャンペーン", "#期間限定", "#お得", "#特別価格", "#今月限定"],
     cta: "プロフィールのリンクから今すぐ予約を。",
   },
@@ -71,7 +71,7 @@ const SYSTEM_PROMPT = `あなたは小規模店舗（美容室・整体院・飲
 [
   {
     "title": "投稿タイトル（25文字以内）",
-    "body": "Instagram投稿本文（120～220文字）",
+    "body": "Instagram投稿本文（120〜220文字）",
     "hashtags": ["#タグ1", "#タグ2", "#タグ3", "#タグ4", "#タグ5"],
     "cta": "行動嗚起文（自然な一文）"
   }
@@ -82,8 +82,8 @@ const SYSTEM_PROMPT = `あなたは小規模店舗（美容室・整体院・飲
 - 売り込み感を強くしすぎない
 - 読者の悩みに寄り添う
 - 具体的なシーンを入れる
-- 本文は120～220文字程度
-- ハッシュタグは5～8個
+- 本文は120〜220文字程度
+- ハッシュタグは5〜8個
 - CTAは自然にする
 - 10個すべて切り口を変える（悩み共感・季節ネタ・Before/After風・よくある質問・豆知識・お客様の声風・キャンペーン告知・スタッフ目線・失敗回避・予約促進）`;
 
@@ -117,7 +117,14 @@ export async function POST(req: NextRequest) {
 
     if (!apiKey) {
       await new Promise((r) => setTimeout(r, 800));
-      return NextResponse.json({ posts: DUMMY_POSTS });
+      // Shuffle based on input so different text gives different results in demo mode
+      const seed = userInput.trim().split("").reduce((acc: number, c: string) => acc + c.charCodeAt(0), 0);
+      const shuffled = [...DUMMY_POSTS];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = (seed * (i + 3)) % (i + 1);
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      return NextResponse.json({ posts: shuffled });
     }
 
     const { default: OpenAI } = await import("openai");
