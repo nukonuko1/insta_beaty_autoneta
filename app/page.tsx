@@ -49,15 +49,17 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [allCopied, setAllCopied] = useState(false);
   const [inputSaved, setInputSaved] = useState(false);
+  const [apiWarning, setApiWarning] = useState<string | null>(null);
 
   const { sessions, addSession, updatePost, scheduledPosts } = useSessions();
   const { savedInputs, saveInput, removeInput } = useSavedInputs();
 
   // Core generation — accepts input directly to avoid stale closure issues
   const handleGenerateWith = async (input: string) => {
-    if (!input.trim()) return;
+    if (!input.trim() || isLoading) return;
     setIsLoading(true);
     setError(null);
+    setApiWarning(null);
     setCurrentPosts([]);
     setCurrentSessionId(null);
 
@@ -72,6 +74,8 @@ export default function Home() {
         setError(data.error ?? "エラーが発生しました。");
         return;
       }
+
+      if (data.warning) setApiWarning(data.warning);
 
       const rawPosts: RawPost[] = data.posts ?? [];
       const posts: Post[] = rawPosts.map((p, i) => ({
@@ -301,6 +305,16 @@ export default function Home() {
             {error && (
               <div className="bg-red-50 border border-red-200 rounded-2xl p-4 mb-6 text-red-600 text-sm text-center">
                 {error}
+              </div>
+            )}
+
+            {/* API warning (no key set) */}
+            {apiWarning && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-3 mb-4 text-yellow-700 text-xs text-center">
+                ⚠️ {apiWarning}
+                <span className="block mt-0.5 text-yellow-600">
+                  Vercelの環境変数に ANTHROPIC_API_KEY を設定すると、入力内容に合わせた投稿文が生成されます。
+                </span>
               </div>
             )}
 
